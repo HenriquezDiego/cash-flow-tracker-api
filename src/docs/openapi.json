@@ -11,9 +11,40 @@
   "servers": [
     { "url": "/" }
   ],
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "Endpoints de autenticación con Google OAuth"
+    },
+    {
+      "name": "Categories",
+      "description": "Gestión de categorías de gastos"
+    },
+    {
+      "name": "Expenses",
+      "description": "Gestión de gastos y transacciones"
+    },
+    {
+      "name": "Fixed Expenses",
+      "description": "Gestión de gastos fijos recurrentes"
+    },
+    {
+      "name": "Budget",
+      "description": "Gestión de presupuestos mensuales"
+    },
+    {
+      "name": "Debts",
+      "description": "Gestión de deudas y tarjetas de crédito"
+    },
+    {
+      "name": "Meta",
+      "description": "Metadatos y utilidades del sistema"
+    }
+  ],
   "paths": {
     "/api/meta/expenses/statuses": {
       "get": {
+        "tags": ["Meta"],
         "summary": "Get allowed expense statuses",
         "responses": {
           "200": {
@@ -35,6 +66,7 @@
     },
     "/api/meta/expenses/entry-types": {
       "get": {
+        "tags": ["Meta"],
         "summary": "Get allowed expense entry types",
         "responses": {
           "200": {
@@ -56,6 +88,7 @@
     },
     "/health": {
       "get": {
+        "tags": ["Meta"],
         "summary": "Health check",
         "responses": {
           "200": {
@@ -66,6 +99,7 @@
     },
     "/api/categories": {
       "get": {
+        "tags": ["Categories"],
         "summary": "List categories",
         "responses": {
           "200": {
@@ -79,10 +113,171 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": ["Categories"],
+        "summary": "Create category",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Category name",
+                    "example": "Alimentación"
+                  },
+                  "color": {
+                    "type": "string",
+                    "description": "Hex color code",
+                    "example": "#FF5733"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Category description",
+                    "example": "Gastos de comida y bebida"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Category created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {"type": "boolean"},
+                    "message": {"type": "string"},
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {"type": "integer"},
+                        "name": {"type": "string"},
+                        "color": {"type": "string"},
+                        "description": {"type": "string"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/categories/{id}": {
+      "put": {
+        "tags": ["Categories"],
+        "summary": "Update category",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {"type": "integer"},
+            "description": "Category ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Category name"
+                  },
+                  "color": {
+                    "type": "string",
+                    "description": "Hex color code"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Category description"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Category updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {"type": "boolean"},
+                    "message": {"type": "string"},
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {"type": "integer"},
+                        "name": {"type": "string"},
+                        "color": {"type": "string"},
+                        "description": {"type": "string"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Categories"],
+        "summary": "Delete category",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {"type": "integer"},
+            "description": "Category ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Category deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {"type": "boolean"},
+                    "message": {"type": "string"},
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {"type": "integer"},
+                        "deleted": {"type": "boolean"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/expenses": {
       "get": {
+        "tags": ["Expenses"],
         "summary": "List expenses",
         "responses": {
           "200": {
@@ -98,6 +293,7 @@
         }
       },
       "post": {
+        "tags": ["Expenses"],
         "summary": "Create expense",
         "requestBody": {
           "required": true,
@@ -110,6 +306,7 @@
     },
     "/api/expenses/batch": {
       "post": {
+        "tags": ["Expenses"],
         "summary": "Create multiple expenses",
         "requestBody": {
           "required": true,
@@ -120,52 +317,55 @@
     },
     "/api/expenses/{id}": {
       "put": {
+        "tags": ["Expenses"],
         "summary": "Update expense",
         "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ],
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateExpenseRequest" } } } },
         "responses": { "200": { "description": "Updated" } }
       },
       "delete": {
+        "tags": ["Expenses"],
         "summary": "Delete expense",
         "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ],
         "responses": { "200": { "description": "Deleted" } }
       }
     },
     "/api/fixed-expenses": {
-      "get": { "summary": "List fixed expenses", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ListFixedExpensesResponse" } } } } } },
-      "post": { "summary": "Create fixed expense", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateFixedExpenseRequest" } } } }, "responses": { "201": { "description": "Created" } } }
+      "get": { "tags": ["Fixed Expenses"], "summary": "List fixed expenses", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ListFixedExpensesResponse" } } } } } },
+      "post": { "tags": ["Fixed Expenses"], "summary": "Create fixed expense", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateFixedExpenseRequest" } } } }, "responses": { "201": { "description": "Created" } } }
     },
     "/api/fixed-expenses/{id}": {
-      "put": { "summary": "Update fixed expense", "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateFixedExpenseRequest" } } } }, "responses": { "200": { "description": "Updated" } } },
-      "delete": { "summary": "Delete fixed expense", "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ], "responses": { "200": { "description": "Deleted" } } }
+      "put": { "tags": ["Fixed Expenses"], "summary": "Update fixed expense", "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateFixedExpenseRequest" } } } }, "responses": { "200": { "description": "Updated" } } },
+      "delete": { "tags": ["Fixed Expenses"], "summary": "Delete fixed expense", "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ], "responses": { "200": { "description": "Deleted" } } }
     },
     "/api/generate-fixed-expenses": {
-      "post": { "summary": "Generate fixed expenses for a month", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenerateFixedExpensesRequest" } } } }, "responses": { "201": { "description": "Created" } } }
+      "post": { "tags": ["Fixed Expenses"], "summary": "Generate fixed expenses for a month", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/GenerateFixedExpensesRequest" } } } }, "responses": { "201": { "description": "Created" } } }
     },
     "/api/budget": {
-      "get": { "summary": "Get budget", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ListBudgetResponse" } } } } } },
-      "put": { "summary": "Update budget", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateBudgetRequest" } } } }, "responses": { "200": { "description": "Updated" } } }
+      "get": { "tags": ["Budget"], "summary": "Get budget", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ListBudgetResponse" } } } } } },
+      "put": { "tags": ["Budget"], "summary": "Update budget", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateBudgetRequest" } } } }, "responses": { "200": { "description": "Updated" } } }
     },
     "/api/debts": {
-      "get": { "summary": "List debts", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ListDebtsResponse" } } } } } },
-      "post": { "summary": "Create debt", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateDebtRequest" } } } }, "responses": { "201": { "description": "Created" } } }
+      "get": { "tags": ["Debts"], "summary": "List debts", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ListDebtsResponse" } } } } } },
+      "post": { "tags": ["Debts"], "summary": "Create debt", "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateDebtRequest" } } } }, "responses": { "201": { "description": "Created" } } }
     },
     "/api/debts/{id}": {
-      "put": { "summary": "Update debt", "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateDebtRequest" } } } }, "responses": { "200": { "description": "Updated" } } },
-      "delete": { "summary": "Delete debt", "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ], "responses": { "200": { "description": "Deleted" } } }
+      "put": { "tags": ["Debts"], "summary": "Update debt", "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateDebtRequest" } } } }, "responses": { "200": { "description": "Updated" } } },
+      "delete": { "tags": ["Debts"], "summary": "Delete debt", "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ], "responses": { "200": { "description": "Deleted" } } }
     },
     "/api/debts/{id}/summary": {
-      "get": { "summary": "Debt summary", "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ], "responses": { "200": { "description": "OK" } } }
+      "get": { "tags": ["Debts"], "summary": "Debt summary", "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ], "responses": { "200": { "description": "OK" } } }
     },
     "/api/debts/summary": {
-      "get": { "summary": "All debts summaries", "responses": { "200": { "description": "OK" } } }
+      "get": { "tags": ["Debts"], "summary": "All debts summaries", "responses": { "200": { "description": "OK" } } }
     },
     "/api/debts/{id}/installments": {
-      "get": { "summary": "Debt installments", "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }, { "in": "query", "name": "months", "required": true, "schema": { "type": "integer", "minimum": 1 } }, { "in": "query", "name": "start", "required": false, "schema": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" } } ], "responses": { "200": { "description": "OK" } } }
+      "get": { "tags": ["Debts"], "summary": "Debt installments", "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }, { "in": "query", "name": "months", "required": true, "schema": { "type": "integer", "minimum": 1 } }, { "in": "query", "name": "start", "required": false, "schema": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" } } ], "responses": { "200": { "description": "OK" } } }
     }
     ,
     "/api/debts/{id}/statements": {
       "post": {
+        "tags": ["Debts"],
         "summary": "Create statement for period",
         "parameters": [
           { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } },
@@ -212,6 +412,7 @@
     },
     "/api/debts/{id}/statement-preview": {
       "get": {
+        "tags": ["Debts"],
         "summary": "Preview statement without persisting",
         "parameters": [
           { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } },
@@ -280,6 +481,14 @@
     }
   },
   "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT token obtained from /api/auth/google"
+      }
+    },
     "schemas": {
       "Expense": {
         "type": "object",
