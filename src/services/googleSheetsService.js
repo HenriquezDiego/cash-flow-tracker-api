@@ -274,6 +274,123 @@ class GoogleSheetsService {
   }
 
   /**
+   * Add a new category to Google Sheets
+   */
+  async addCategory(category) {
+    try {
+      logger.info('Adding new category to Google Sheets', { name: category.name });
+      
+      // Get the next available ID
+      const categories = await this.getCategories();
+      const maxId = categories.length > 0 ? Math.max(...categories.map(c => c.id || 0)) : 0;
+      const newId = maxId + 1;
+      
+      const categoryData = {
+        id: newId,
+        name: category.name,
+        color: category.color || '#6B7280',
+        description: category.description || ''
+      };
+      
+      // Add to Categories sheet
+      const values = [
+        [categoryData.id, categoryData.name, categoryData.color, categoryData.description]
+      ];
+      
+      const response = await this.makeRequest('/values/Categories!A:D:append', {
+        method: 'POST',
+        body: JSON.stringify({
+          values: values,
+          valueInputOption: 'RAW'
+        })
+      });
+      
+      logger.info('Category added successfully', { id: newId, name: category.name });
+      return categoryData;
+    } catch (error) {
+      logger.error('Error adding category', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Update a category in Google Sheets
+   */
+  async updateCategory(id, categoryData) {
+    try {
+      logger.info('Updating category in Google Sheets', { id, updates: categoryData });
+      
+      // Get all categories to find the row
+      const categories = await this.getCategories();
+      const categoryIndex = categories.findIndex(c => c.id === parseInt(id));
+      
+      if (categoryIndex === -1) {
+        throw new ApiError(404, 'Category not found');
+      }
+      
+      // Calculate the row number (header + index + 1)
+      const rowNumber = categoryIndex + 2;
+      
+      // Prepare update data
+      const updateData = {
+        id: parseInt(id),
+        name: categoryData.name,
+        color: categoryData.color || '#6B7280',
+        description: categoryData.description || ''
+      };
+      
+      const values = [
+        [updateData.id, updateData.name, updateData.color, updateData.description]
+      ];
+      
+      const response = await this.makeRequest(`/values/Categories!A${rowNumber}:D${rowNumber}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          values: values,
+          valueInputOption: 'RAW'
+        })
+      });
+      
+      logger.info('Category updated successfully', { id, name: updateData.name });
+      return updateData;
+    } catch (error) {
+      logger.error('Error updating category', { id, error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a category from Google Sheets
+   */
+  async deleteCategory(id) {
+    try {
+      logger.info('Deleting category from Google Sheets', { id });
+      
+      // Get all categories to find the row
+      const categories = await this.getCategories();
+      const categoryIndex = categories.findIndex(c => c.id === parseInt(id));
+      
+      if (categoryIndex === -1) {
+        throw new ApiError(404, 'Category not found');
+      }
+      
+      // Calculate the row number (header + index + 1)
+      const rowNumber = categoryIndex + 2;
+      
+      // Delete the row
+      const response = await this.makeRequest(`/values/Categories!A${rowNumber}:D${rowNumber}:clear`, {
+        method: 'POST'
+      });
+      
+      logger.info('Category deleted successfully', { id });
+      return { id: parseInt(id), deleted: true };
+    } catch (error) {
+      logger.error('Error deleting category', { id, error: error.message });
+      throw error;
+    }
+  }
+
+  /**
    * Get expenses as array of objects using header row as keys
    */
   async getExpensesObjects() {
