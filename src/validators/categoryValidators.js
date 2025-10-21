@@ -12,13 +12,7 @@ export const createCategoryValidator = [
   body('color')
     .optional()
     .matches(/^#[0-9A-Fa-f]{6}$/)
-    .withMessage('Color must be a valid hex color (e.g., #FF5733)'),
-    
-  body('description')
-    .optional()
-    .trim()
-    .isLength({ max: 500 })
-    .withMessage('Description must be at most 500 characters')
+    .withMessage('Color must be a valid hex color (e.g., #FF5733)')
 ];
 
 /**
@@ -38,13 +32,7 @@ export const updateCategoryValidator = [
   body('color')
     .optional()
     .matches(/^#[0-9A-Fa-f]{6}$/)
-    .withMessage('Color must be a valid hex color (e.g., #FF5733)'),
-    
-  body('description')
-    .optional()
-    .trim()
-    .isLength({ max: 500 })
-    .withMessage('Description must be at most 500 characters')
+    .withMessage('Color must be a valid hex color (e.g., #FF5733)')
 ];
 
 /**

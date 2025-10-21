@@ -117,7 +117,6 @@
       "post": {
         "tags": ["Categories"],
         "summary": "Create category",
-        "security": [{"BearerAuth": []}],
         "requestBody": {
           "required": true,
           "content": {
@@ -135,11 +134,6 @@
                     "type": "string",
                     "description": "Hex color code",
                     "example": "#FF5733"
-                  },
-                  "description": {
-                    "type": "string",
-                    "description": "Category description",
-                    "example": "Gastos de comida y bebida"
                   }
                 }
               }
@@ -161,8 +155,7 @@
                       "properties": {
                         "id": {"type": "integer"},
                         "name": {"type": "string"},
-                        "color": {"type": "string"},
-                        "description": {"type": "string"}
+                        "color": {"type": "string"}
                       }
                     }
                   }
@@ -177,7 +170,6 @@
       "put": {
         "tags": ["Categories"],
         "summary": "Update category",
-        "security": [{"BearerAuth": []}],
         "parameters": [
           {
             "in": "path",
@@ -201,10 +193,6 @@
                   "color": {
                     "type": "string",
                     "description": "Hex color code"
-                  },
-                  "description": {
-                    "type": "string",
-                    "description": "Category description"
                   }
                 }
               }
@@ -226,8 +214,7 @@
                       "properties": {
                         "id": {"type": "integer"},
                         "name": {"type": "string"},
-                        "color": {"type": "string"},
-                        "description": {"type": "string"}
+                        "color": {"type": "string"}
                       }
                     }
                   }
@@ -240,7 +227,6 @@
       "delete": {
         "tags": ["Categories"],
         "summary": "Delete category",
-        "security": [{"BearerAuth": []}],
         "parameters": [
           {
             "in": "path",

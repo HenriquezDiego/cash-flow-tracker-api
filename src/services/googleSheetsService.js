@@ -16,6 +16,12 @@ class GoogleSheetsService {
     };
     this.accessToken = null;
     this.tokenExpiry = null;
+    // Cache para reducir peticiones a Google Sheets
+    this.cache = {
+      categories: null,
+      categoriesTimestamp: null,
+      cacheTimeout: 30000 // 30 segundos
+    };
   }
 
   /**
@@ -254,17 +260,31 @@ class GoogleSheetsService {
   }
 
   /**
-   * Get categories from Google Sheets
+   * Get categories from Google Sheets with cache
    */
   async getCategories() {
     try {
+      // Verificar si tenemos datos en caché y si no han expirado
+      const now = Date.now();
+      if (this.cache.categories && 
+          this.cache.categoriesTimestamp && 
+          (now - this.cache.categoriesTimestamp) < this.cache.cacheTimeout) {
+        logger.debug('Returning categories from cache', { count: this.cache.categories.length });
+        return this.cache.categories;
+      }
+
       logger.info('Fetching categories from Google Sheets');
-      const response = await this.makeRequest('/values/Categories!A:D');
+      const response = await this.makeRequest('/values/Categories!A:C');
       const values = response.values || [];
       const categories = this.coerceTypesForSheet(
         this.normalizeKeysForSheet(this.mapRowsToObjects(values), 'Categories'),
         'Categories'
       );
+      
+      // Guardar en caché
+      this.cache.categories = categories;
+      this.cache.categoriesTimestamp = now;
+      
       logger.info('Categories fetched successfully', { count: categories.length });
       return categories;
     } catch (error) {
@@ -288,22 +308,24 @@ class GoogleSheetsService {
       const categoryData = {
         id: newId,
         name: category.name,
-        color: category.color || '#6B7280',
-        description: category.description || ''
+        color: category.color || '#6B7280'
       };
       
       // Add to Categories sheet
       const values = [
-        [categoryData.id, categoryData.name, categoryData.color, categoryData.description]
+        [categoryData.id, categoryData.name, categoryData.color]
       ];
       
-      const response = await this.makeRequest('/values/Categories!A:D:append', {
+      const response = await this.makeRequest('/values/Categories!A:C:append?valueInputOption=RAW', {
         method: 'POST',
         body: JSON.stringify({
-          values: values,
-          valueInputOption: 'RAW'
+          values: values
         })
       });
+      
+      // Invalidar caché
+      this.cache.categories = null;
+      this.cache.categoriesTimestamp = null;
       
       logger.info('Category added successfully', { id: newId, name: category.name });
       return categoryData;
@@ -322,9 +344,21 @@ class GoogleSheetsService {
       
       // Get all categories to find the row
       const categories = await this.getCategories();
-      const categoryIndex = categories.findIndex(c => c.id === parseInt(id));
+      logger.debug('Categories found for update', { 
+        categoriesCount: categories.length, 
+        searchingForId: id, 
+        parsedId: parseInt(id),
+        categoryIds: categories.map(c => ({ id: c.id, type: typeof c.id }))
+      });
+      
+      const categoryIndex = categories.findIndex(c => String(c.id) === String(id));
       
       if (categoryIndex === -1) {
+        logger.error('Category not found for update', { 
+          id, 
+          parsedId: parseInt(id), 
+          availableIds: categories.map(c => c.id) 
+        });
         throw new ApiError(404, 'Category not found');
       }
       
@@ -335,21 +369,23 @@ class GoogleSheetsService {
       const updateData = {
         id: parseInt(id),
         name: categoryData.name,
-        color: categoryData.color || '#6B7280',
-        description: categoryData.description || ''
+        color: categoryData.color || '#6B7280'
       };
       
       const values = [
-        [updateData.id, updateData.name, updateData.color, updateData.description]
+        [updateData.id, updateData.name, updateData.color]
       ];
       
-      const response = await this.makeRequest(`/values/Categories!A${rowNumber}:D${rowNumber}`, {
+      const response = await this.makeRequest(`/values/Categories!A${rowNumber}:C${rowNumber}?valueInputOption=RAW`, {
         method: 'PUT',
         body: JSON.stringify({
-          values: values,
-          valueInputOption: 'RAW'
+          values: values
         })
       });
+      
+      // Invalidar caché
+      this.cache.categories = null;
+      this.cache.categoriesTimestamp = null;
       
       logger.info('Category updated successfully', { id, name: updateData.name });
       return updateData;
@@ -368,9 +404,21 @@ class GoogleSheetsService {
       
       // Get all categories to find the row
       const categories = await this.getCategories();
-      const categoryIndex = categories.findIndex(c => c.id === parseInt(id));
+      logger.debug('Categories found for deletion', { 
+        categoriesCount: categories.length, 
+        searchingForId: id, 
+        parsedId: parseInt(id),
+        categoryIds: categories.map(c => ({ id: c.id, type: typeof c.id }))
+      });
+      
+      const categoryIndex = categories.findIndex(c => String(c.id) === String(id));
       
       if (categoryIndex === -1) {
+        logger.error('Category not found for deletion', { 
+          id, 
+          parsedId: parseInt(id), 
+          availableIds: categories.map(c => c.id) 
+        });
         throw new ApiError(404, 'Category not found');
       }
       
@@ -378,9 +426,13 @@ class GoogleSheetsService {
       const rowNumber = categoryIndex + 2;
       
       // Delete the row
-      const response = await this.makeRequest(`/values/Categories!A${rowNumber}:D${rowNumber}:clear`, {
+      const response = await this.makeRequest(`/values/Categories!A${rowNumber}:C${rowNumber}:clear`, {
         method: 'POST'
       });
+      
+      // Invalidar caché
+      this.cache.categories = null;
+      this.cache.categoriesTimestamp = null;
       
       logger.info('Category deleted successfully', { id });
       return { id: parseInt(id), deleted: true };

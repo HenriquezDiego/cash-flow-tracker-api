@@ -29,7 +29,7 @@ export const getCategories = async (req, res, next) => {
  */
 export const createCategory = async (req, res, next) => {
   try {
-    const { name, color, description } = req.body;
+    const { name, color } = req.body;
     
     logger.info('POST /api/categories - Creating new category', { name });
     
@@ -40,8 +40,7 @@ export const createCategory = async (req, res, next) => {
     
     const category = {
       name: name.trim(),
-      color: color || '#6B7280',
-      description: description || ''
+      color: color || '#6B7280'
     };
     
     const result = await sheetsService.addCategory(category);
@@ -68,7 +67,7 @@ export const createCategory = async (req, res, next) => {
 export const updateCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, color, description } = req.body;
+    const { name, color } = req.body;
     
     logger.info('PUT /api/categories - Updating category', { id });
     
@@ -81,7 +80,6 @@ export const updateCategory = async (req, res, next) => {
     const updateData = {};
     if (name !== undefined) updateData.name = name.trim();
     if (color !== undefined) updateData.color = color;
-    if (description !== undefined) updateData.description = description;
     
     // Check if there's something to update
     if (Object.keys(updateData).length === 0) {
