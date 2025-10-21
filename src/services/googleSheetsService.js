@@ -1,81 +1,46 @@
-﻿import jwt from 'jsonwebtoken';
-import logger from '../config/logger.js';
+﻿﻿import logger from '../config/logger.js';
 import { ApiError } from '../middleware/errorHandler.js';
 import schemaMappings from '../config/schemaMappings.js';
 import schemaTypes from '../config/schemaTypes.js';
 /**
- * Service class for Google Sheets operations
+ * Service class for Google Sheets operations (Multi-user)
+ * Each instance is bound to a specific user's access token and sheet
  */
 class GoogleSheetsService {
-  constructor() {
-    this.sheetId = process.env.GOOGLE_SHEET_ID;
-    this.credentials = {
-      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY,
-      token_uri: 'https://oauth2.googleapis.com/token'
-    };
-    this.accessToken = null;
-    this.tokenExpiry = null;
+  /**
+   * Create a GoogleSheetsService instance for a specific user
+   * @param {string} userAccessToken - User's OAuth access token
+   * @param {string} userSheetId - ID of user's Google Sheet
+   */
+  constructor(userAccessToken, userSheetId) {
+    if (!userAccessToken) {
+      throw new ApiError(401, 'User access token is required');
+    }
+    if (!userSheetId) {
+      throw new ApiError(400, 'User sheet ID is required');
+    }
+
+    this.accessToken = userAccessToken;
+    this.sheetId = userSheetId;
+    
     // Cache para reducir peticiones a Google Sheets
     this.cache = {
       categories: null,
       categoriesTimestamp: null,
       cacheTimeout: 30000 // 30 segundos
     };
+    
+    logger.debug('GoogleSheetsService instance created', { sheetId: userSheetId });
   }
 
   /**
    * Get access token for Google Sheets API
+   * Now simply returns the user's OAuth token
    */
   async getAccessToken() {
-    try {
-      // Check if token is still valid
-      if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
-        return this.accessToken;
-      }
-
-      logger.info('Generating new Google Sheets access token');
-
-      const now = Math.floor(Date.now() / 1000);
-      const payload = {
-        iss: this.credentials.client_email,
-        scope: 'https://www.googleapis.com/auth/spreadsheets',
-        aud: this.credentials.token_uri,
-        exp: now + 3600,
-        iat: now
-      };
-
-      const privateKey = this.credentials.private_key.replace(/\\n/g, '\n');
-      
-      const token = jwt.sign(payload, privateKey, { algorithm: 'RS256' });
-      
-      const response = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-          assertion: token
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        logger.error('Failed to get access token', { status: response.status, error: errorText });
-        throw new ApiError(500, 'Failed to authenticate with Google Sheets API');
-      }
-
-      const data = await response.json();
-      this.accessToken = data.access_token;
-      this.tokenExpiry = Date.now() + (data.expires_in * 1000);
-      
-      logger.info('Successfully obtained Google Sheets access token');
-      return this.accessToken;
-    } catch (error) {
-      logger.error('Error getting access token', { error: error.message, stack: error.stack });
-      throw error;
-    }
+    // Simply return the user's OAuth access token
+    // Token refresh is handled by the auth middleware/service
+    return this.accessToken;
   }
 
   /**

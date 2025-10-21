@@ -1,8 +1,6 @@
 import logger from '../config/logger.js';
 import { ApiError } from '../middleware/errorHandler.js';
 
-const sheetsService = new GoogleSheetsService();
-
 /**
  * Get all categories
  */
@@ -42,7 +40,7 @@ export const createCategory = async (req, res, next) => {
       color: color || '#6B7280'
     };
     
-    const result = await sheetsService.addCategory(category);
+    const result = await req.sheetsService.addCategory(category);
     
     logger.info('Category created successfully', { id: result.id, name: result.name });
     
@@ -85,7 +83,7 @@ export const updateCategory = async (req, res, next) => {
       throw new ApiError(400, 'At least one field must be provided for update');
     }
     
-    const result = await sheetsService.updateCategory(id, updateData);
+    const result = await req.sheetsService.updateCategory(id, updateData);
     
     logger.info('Category updated successfully', { id, name: result.name });
     
@@ -118,7 +116,7 @@ export const deleteCategory = async (req, res, next) => {
       throw new ApiError(400, 'Valid category ID is required');
     }
     
-    const result = await sheetsService.deleteCategory(id);
+    const result = await req.sheetsService.deleteCategory(id);
     
     logger.info('Category deleted successfully', { id });
     
