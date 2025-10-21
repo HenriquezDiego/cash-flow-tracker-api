@@ -14,7 +14,7 @@
   "tags": [
     {
       "name": "Authentication",
-      "description": "Endpoints de autenticación con Google OAuth"
+      "description": "Endpoints de autenticación con Google OAuth. Para usar la API: 1) Abre /api/auth/google en el navegador, 2) Completa el login con Google, 3) Usa el token JWT en el botón 'Authorize' de Swagger"
     },
     {
       "name": "Categories",
@@ -42,6 +42,191 @@
     }
   ],
   "paths": {
+    "/api/auth/google": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Iniciar login con Google OAuth",
+        "description": "⚠️ IMPORTANTE: Este endpoint redirige a Google. Debe usarse directamente en el navegador, no desde Swagger UI. Abre: http://localhost:3001/api/auth/google en tu navegador para iniciar el login.",
+        "responses": {
+          "302": {
+            "description": "Redirección a Google OAuth - Abre en navegador",
+            "headers": {
+              "Location": {
+                "description": "URL de Google OAuth",
+                "schema": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/google/callback": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Callback de Google OAuth",
+        "description": "⚠️ AUTOMÁTICO: Este endpoint es llamado automáticamente por Google después del login. No debe usarse manualmente desde Swagger UI.",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Código de autorización de Google",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Autenticación exitosa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "email": { "type": "string" },
+                        "name": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Obtener usuario actual",
+        "description": "Obtiene la información del usuario autenticado",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Información del usuario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "email": { "type": "string" },
+                        "name": { "type": "string" },
+                        "sheetId": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado"
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Cerrar sesión",
+        "description": "Cierra la sesión del usuario actual",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Sesión cerrada exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/sheet": {
+      "put": {
+        "tags": ["Authentication"],
+        "summary": "Actualizar Sheet ID",
+        "description": "Actualiza el ID de Google Sheet del usuario",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sheetId": { "type": "string", "description": "ID de Google Sheet" }
+                },
+                "required": ["sheetId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sheet ID actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/check": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Verificar autenticación",
+        "description": "Verifica si el usuario está autenticado",
+        "responses": {
+          "200": {
+            "description": "Estado de autenticación",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authenticated": { "type": "boolean" },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "email": { "type": "string" },
+                        "name": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/meta/expenses/statuses": {
       "get": {
         "tags": ["Meta"],
