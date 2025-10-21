@@ -1,4 +1,3 @@
-import GoogleSheetsService from '../services/googleSheetsService.js';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../config/logger.js';
 import { ApiError } from '../middleware/errorHandler.js';
@@ -6,15 +5,13 @@ import { buildDebtSummary, monthlyRateFromAnnualEffective, interestForMonth, nex
 import { calculateStatement, normalizeAnnualRateToUnit, resolvePeriodBounds, buildEvents, sumPayments as sumPaymentsCalc, sumCharges as sumChargesCalc, computeSpdInterests, computeInterestCarryOver } from '../utils/creditStatementCalculator.js';
 import { daysBetweenDates } from '../utils/finance.js';
 
-const sheetsService = new GoogleSheetsService();
-
 /**
  * Get all debts
  */
 export const getDebts = async (req, res, next) => {
   try {
     logger.info('GET /api/debts - Fetching all debts');
-    const items = await sheetsService.getDebtsObjects();
+    const items = await req.sheetsService.getDebtsObjects();
     res.json({ success: true, data: items, count: items.length });
   } catch (error) {
     logger.error('Error in getDebts controller', { error: error.message });
@@ -51,7 +48,7 @@ export const addDebt = async (req, res, next) => {
       brand: brand !== undefined && brand !== null ? String(brand).trim() : undefined
     };
 
-    const result = await sheetsService.addDebt(debt);
+    const result = await req.sheetsService.addDebt(debt);
 
     logger.info('Debt added successfully', { debtId: debt.id });
 
@@ -95,7 +92,7 @@ export const updateDebt = async (req, res, next) => {
       brand: brand !== undefined ? String(brand).trim() : undefined
     };
 
-    const result = await sheetsService.updateDebt(debt);
+    const result = await req.sheetsService.updateDebt(debt);
 
     logger.info('Debt updated successfully', { debtId: debt.id });
 
@@ -123,7 +120,7 @@ export const deleteDebt = async (req, res, next) => {
       throw new ApiError(400, 'Missing required field: id');
     }
 
-    const result = await sheetsService.deleteDebt(String(id));
+    const result = await req.sheetsService.deleteDebt(String(id));
 
     res.json({
       success: true,
@@ -149,7 +146,7 @@ export const getDebtSummary = async (req, res, next) => {
       throw new ApiError(400, 'Missing required field: id');
     }
 
-    const rows = await sheetsService.getDebts();
+    const rows = await req.sheetsService.getDebts();
     const header = rows[0] || [];
     const idx = {
       id: 0, name: 1, issuer: 2, creditLimit: 3, balance: 4, dueDay: 5, cutOffDay: 6, maskPan: 7, interesEfectivo: 8, brand: 9, active: 10
@@ -186,7 +183,7 @@ export const getDebtSummary = async (req, res, next) => {
 export const getDebtsSummary = async (req, res, next) => {
   try {
     logger.info('GET /api/debts/summary - Building debts summaries');
-    const rows = await sheetsService.getDebts();
+    const rows = await req.sheetsService.getDebts();
     const idx = { id: 0, name: 1, issuer: 2, creditLimit: 3, balance: 4, dueDay: 5, cutOffDay: 6, maskPan: 7, interesEfectivo: 8, brand: 9, active: 10 };
     const items = rows.slice(1).map(r => {
       const debt = {
@@ -228,7 +225,7 @@ export const getDebtInstallments = async (req, res, next) => {
     }
 
     // Load debt rows and find the specific debt
-    const rows = await sheetsService.getDebts();
+    const rows = await req.sheetsService.getDebts();
     const idx = { id: 0, name: 1, issuer: 2, creditLimit: 3, balance: 4, dueDay: 5, cutOffDay: 6, maskPan: 7, interesEfectivo: 8, brand: 9, active: 10 };
     const row = rows.slice(1).find(r => String(r[idx.id]) === String(id));
     if (!row) {
@@ -333,7 +330,7 @@ export const accrueDebt = async (req, res, next) => {
     logger.info('POST /api/debts/:id/accrue - Start', { id, dateParam, periodParam, recompute });
 
     // 1) Load debt
-    const rows = await sheetsService.getDebts();
+    const rows = await req.sheetsService.getDebts();
     const idx = { id: 0, name: 1, issuer: 2, creditLimit: 3, balance: 4, dueDay: 5, cutOffDay: 6, maskPan: 7, interesEfectivo: 8, brand: 9, active: 10 };
     const row = rows.slice(1).find(r => String(r[idx.id]) === String(id));
     if (!row) throw new ApiError(404, 'Debt not found');
@@ -396,7 +393,7 @@ export const accrueDebt = async (req, res, next) => {
       : new Date(statementDate.getFullYear(), statementDate.getMonth(), dayClamp(statementDate.getFullYear(), statementDate.getMonth(), 25));
 
     // 3) Idempotency: check existing CreditHistory for (id, statementDate)
-    const history = await sheetsService.getCreditHistoryObjects();
+    const history = await req.sheetsService.getCreditHistoryObjects();
     const statementDateStr = statementDate.toISOString().slice(0, 10);
     const exists = history.some(h => String(h.debtId) === String(id) && String(h.statementDate) === statementDateStr);
     let previousRowNumber = null;
@@ -406,9 +403,9 @@ export const accrueDebt = async (req, res, next) => {
         return res.status(200).json({ success: true, skipped: true, reason: 'Already accrued for this statementDate', statementDate: statementDateStr });
       }
       // Load previous record to rollback
-      previousRowNumber = await sheetsService.findCreditHistoryRow(id, statementDateStr);
+      previousRowNumber = await req.sheetsService.findCreditHistoryRow(id, statementDateStr);
       if (previousRowNumber) {
-        previousRecord = await sheetsService.getCreditHistoryByRow(previousRowNumber);
+        previousRecord = await req.sheetsService.getCreditHistoryByRow(previousRowNumber);
       }
     }
 
@@ -419,7 +416,7 @@ export const accrueDebt = async (req, res, next) => {
     const previousBalance = lastForDebt && Number.isFinite(lastForDebt.statementBalance) ? Number(lastForDebt.statementBalance) : (Number.isFinite(debt.balance) ? Number(debt.balance) : 0);
 
     // 5) Gather expenses in [prevStatementDate, statementDate) and compute components
-    const allExpenses = await sheetsService.getExpensesObjects();
+    const allExpenses = await req.sheetsService.getExpensesObjects();
     const periodEvents = [];
     const startPeriod = new Date(statementDate.getFullYear(), statementDate.getMonth() - 1, statementDate.getDate());
     for (const e of allExpenses) {
@@ -477,7 +474,7 @@ export const accrueDebt = async (req, res, next) => {
     let interestCarryOver = 0;
     if (lastForDebt) {
       try {
-        const prevPaid = await sheetsService.sumPaymentsForDebt(
+        const prevPaid = await req.sheetsService.sumPaymentsForDebt(
           id,
           String(lastForDebt.statementDate),
           String(lastForDebt.dueDate)
@@ -509,12 +506,12 @@ export const accrueDebt = async (req, res, next) => {
       annualEffectiveRate: annualRateUnit,
       termMonths: null,
       periodDays: daysBetweenDates(new Date(startPeriod.getFullYear(), startPeriod.getMonth(), startPeriod.getDate()), statementDate) || 0,
-      paymentMade: await sheetsService.sumPaymentsForDebt(id, statementDateStr, dueDate.toISOString().slice(0,10))
+      paymentMade: await req.sheetsService.sumPaymentsForDebt(id, statementDateStr, dueDate.toISOString().slice(0,10))
     };
     if (exists && previousRowNumber && recompute) {
-      await sheetsService.updateCreditHistoryRow(previousRowNumber, record);
+      await req.sheetsService.updateCreditHistoryRow(previousRowNumber, record);
     } else {
-      await sheetsService.appendCreditHistoryRecord(record);
+      await req.sheetsService.appendCreditHistoryRecord(record);
     }
 
     logger.info('Debt statement computed', { debtId: id, statementDate: statementDateStr });
@@ -556,7 +553,7 @@ export const getDebtStatementPreview = async (req, res, next) => {
     logger.info('GET /api/debts/:id/statement-preview - Start', { id, dateParam, periodParam });
 
     // Load debt
-    const rows = await sheetsService.getDebts();
+    const rows = await req.sheetsService.getDebts();
     const idx = { id: 0, name: 1, issuer: 2, creditLimit: 3, balance: 4, dueDay: 5, cutOffDay: 6, maskPan: 7, interesEfectivo: 8, brand: 9, active: 10 };
     const row = rows.slice(1).find(r => String(r[idx.id]) === String(id));
     if (!row) throw new ApiError(404, 'Debt not found');
@@ -616,7 +613,7 @@ export const getDebtStatementPreview = async (req, res, next) => {
       : new Date(statementDate.getFullYear(), statementDate.getMonth(), dayClamp(statementDate.getFullYear(), statementDate.getMonth(), 25));
 
     // If recompute=false and a record exists for this statementDate, return it directly
-    const history = await sheetsService.getCreditHistoryObjects();
+    const history = await req.sheetsService.getCreditHistoryObjects();
     const statementDateStr = statementDate.toISOString().slice(0,10);
     const existing = history.find(h => String(h.debtId) === String(id) && String(h.statementDate) === statementDateStr);
     if (existing && !recompute) {
@@ -630,7 +627,7 @@ export const getDebtStatementPreview = async (req, res, next) => {
     const previousBalance = lastForDebt && Number.isFinite(lastForDebt.statementBalance) ? Number(lastForDebt.statementBalance) : (Number.isFinite(debt.balance) ? Number(debt.balance) : 0);
 
     // Build events within period
-    const allExpenses = await sheetsService.getExpensesObjects();
+    const allExpenses = await req.sheetsService.getExpensesObjects();
     const startPeriod = new Date(statementDate.getFullYear(), statementDate.getMonth() - 1, statementDate.getDate());
     const periodEvents = [];
     for (const e of allExpenses) {
@@ -688,7 +685,7 @@ export const getDebtStatementPreview = async (req, res, next) => {
     let interestCarryOver = 0;
     if (lastForDebt) {
       try {
-        const prevPaid = await sheetsService.sumPaymentsForDebt(
+        const prevPaid = await req.sheetsService.sumPaymentsForDebt(
           id,
           String(lastForDebt.statementDate),
           String(lastForDebt.dueDate)
@@ -717,7 +714,7 @@ export const getDebtStatementPreview = async (req, res, next) => {
       annualEffectiveRate: annualRateUnit,
       termMonths: null,
       periodDays: daysBetweenDates(new Date(startPeriod.getFullYear(), startPeriod.getMonth(), startPeriod.getDate()), statementDate),
-      paymentMade: await sheetsService.sumPaymentsForDebt(id, statementDate.toISOString().slice(0,10), dueDate.toISOString().slice(0,10)),
+      paymentMade: await req.sheetsService.sumPaymentsForDebt(id, statementDate.toISOString().slice(0,10), dueDate.toISOString().slice(0,10)),
       interestBreakdown: { interestSobreSaldo, interestBonificable, interestCarryOver }
     };
     const breakdownPreview = formatResponseTwoDecimals(

@@ -1,17 +1,14 @@
-﻿import GoogleSheetsService from '../services/googleSheetsService.js';
-import logger from '../config/logger.js';
+﻿import logger from '../config/logger.js';
 import { ApiError } from '../middleware/errorHandler.js';
-
-const sheetsService = new GoogleSheetsService();
 
 /**
  * Get budget
  */
 export const getBudget = async (req, res, next) => {
   try {
-    logger.info('GET /api/budget - Fetching budget');
+    logger.info('GET /api/budget - Fetching budget', { userId: req.user?.id });
     
-    const rows = await sheetsService.getBudgetObjects();
+    const rows = await req.sheetsService.getBudgetObjects();
 
     res.json({
       success: true,
@@ -53,7 +50,7 @@ export const updateBudget = async (req, res, next) => {
       amount: parseFloat(amount)
     };
 
-    const result = await sheetsService.updateBudget(budget);
+    const result = await req.sheetsService.updateBudget(budget);
     
     logger.info('Budget updated successfully', { month, amount });
     

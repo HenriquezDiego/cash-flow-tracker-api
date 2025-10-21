@@ -1,16 +1,13 @@
-﻿import GoogleSheetsService from '../services/googleSheetsService.js';
-import logger from '../config/logger.js';
+﻿import logger from '../config/logger.js';
 import { ApiError } from '../middleware/errorHandler.js';
-
-const sheetsService = new GoogleSheetsService();
 
 /**
  * Get all expenses
  */
 export const getExpenses = async (req, res, next) => {
   try {
-    logger.info('GET /api/expenses - Fetching all expenses');
-    const expenses = await sheetsService.getExpensesObjects();
+    logger.info('GET /api/expenses - Fetching all expenses', { userId: req.user?.id });
+    const expenses = await req.sheetsService.getExpensesObjects();
     
     res.json({
       success: true,
@@ -65,7 +62,7 @@ export const addExpensesBulk = async (req, res, next) => {
       };
     });
 
-    const result = await sheetsService.addExpensesBulk(validatedExpenses);
+    const result = await req.sheetsService.addExpensesBulk(validatedExpenses);
     
     logger.info('Multiple expenses added successfully', { count: validatedExpenses.length });
     
@@ -120,7 +117,7 @@ export const addExpense = async (req, res, next) => {
       status: status ? String(status).toLowerCase() : 'pending'
     };
 
-    const result = await sheetsService.addExpense(expense);
+    const result = await req.sheetsService.addExpense(expense);
     
     logger.info('Expense added successfully', { expenseId: expense.id });
     
@@ -169,7 +166,7 @@ export const updateExpense = async (req, res, next) => {
       status: status !== undefined ? (status ? String(status).toLowerCase() : null) : undefined
     };
 
-    const result = await sheetsService.updateExpense(expense);
+    const result = await req.sheetsService.updateExpense(expense);
 
     logger.info('Expense updated successfully', { expenseId: expense.id });
 
@@ -201,7 +198,7 @@ export const deleteExpense = async (req, res, next) => {
       throw new ApiError(400, 'Missing required field: id');
     }
 
-    const result = await sheetsService.deleteExpense(id);
+    const result = await req.sheetsService.deleteExpense(id);
 
     res.json({
       success: true,

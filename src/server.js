@@ -8,6 +8,7 @@ const __dirname = path.dirname(__filename);
 import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
+import session from 'express-session';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
@@ -17,8 +18,11 @@ import fs from 'fs';
 import config from './config/config.js';
 import logger from './config/logger.js';
 import { errorConverter, errorHandler, notFound } from './middleware/errorHandler.js';
+import authService from './services/authService.js';
+import { requireAuth, requireJWT, attachSheetsService } from './middleware/authMiddleware.js';
 
 // Import routes
+import authRoutes from './routes/authRoutes.js';
 import budgetRoutes from './routes/budgetRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
@@ -72,6 +76,23 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Session configuration (before Passport)
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-session-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: config.nodeEnv === 'production', // HTTPS only in production
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+  }
+}));
+
+// Initialize Passport for authentication
+const passport = authService.getPassport();
+app.use(passport.initialize());
+app.use(passport.session());
+
 // Logging middleware
 app.use(morgan('combined', { stream: logger.stream }));
 
@@ -91,20 +112,29 @@ if (config.nodeEnv === 'development' || config.enableDocs) {
 // Root endpoint - show API status
 app.get('/', (req, res) => {
   res.json({
-    message: '?? Cash Flow Tracker API',
+    message: '💰 Cash Flow Tracker API',
     status: 'running',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: config.nodeEnv,
-    version: '1.0.0',
+    version: '2.0.0',
+    authentication: 'OAuth 2.0 with Google',
     endpoints: {
       health: '/health',
-      expenses: '/api/expenses',
-      budgets: '/api/budget',
-      categories: '/api/categories',
-      fixedExpenses: '/api/fixed-expenses',
-      debts: '/api/debts',
-      generateFixedExpenses: '/api/generate-fixed-expenses?month=YYYY-MM'
+      auth: {
+        loginWithGoogle: '/api/auth/google',
+        checkAuth: '/api/auth/check',
+        getCurrentUser: '/api/auth/me',
+        logout: '/api/auth/logout'
+      },
+      data: {
+        expenses: '/api/expenses',
+        budgets: '/api/budget',
+        categories: '/api/categories',
+        fixedExpenses: '/api/fixed-expenses',
+        debts: '/api/debts',
+        generateFixedExpenses: '/api/generate-fixed-expenses?month=YYYY-MM'
+      }
     },
     documentation: (config.nodeEnv === 'development' || config.enableDocs) ? '/docs' : undefined
   });
@@ -121,13 +151,18 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
-app.use('/api/expenses', expenseRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/budget', budgetRoutes);
-app.use('/api/fixed-expenses', fixedExpenseRoutes);
-app.use('/api/debts', debtRoutes);
-app.use('/api/generate-fixed-expenses', generateFixedExpensesRoutes);
-app.use('/api/meta', metaRoutes);
+
+// Authentication routes (public)
+app.use('/api/auth', authRoutes);
+
+// Protected routes (require JWT authentication + user sheet)
+app.use('/api/expenses', requireJWT, attachSheetsService, expenseRoutes);
+app.use('/api/categories', requireJWT, attachSheetsService, categoryRoutes);
+app.use('/api/budget', requireJWT, attachSheetsService, budgetRoutes);
+app.use('/api/fixed-expenses', requireJWT, attachSheetsService, fixedExpenseRoutes);
+app.use('/api/debts', requireJWT, attachSheetsService, debtRoutes);
+app.use('/api/generate-fixed-expenses', requireJWT, attachSheetsService, generateFixedExpensesRoutes);
+app.use('/api/meta', metaRoutes); // Public metadata endpoint
 
 // 404 handler
 app.use(notFound);
@@ -140,9 +175,17 @@ app.use(errorHandler);
 const PORT = config.port;
 
 app.listen(PORT, () => {
-  console.log(`Servidor backend corriendo en http://localhost:${PORT}`);
-  console.log(`Conectado a Google Sheets: ${config.googleSheetId}`);
-  console.log(`Ambiente: ${config.nodeEnv}`);
+  logger.info(`🚀 Cash Flow Tracker API v2.0 running on http://localhost:${PORT}`);
+  logger.info(`📊 Master Sheet ID: ${process.env.MASTER_SHEET_ID}`);
+  logger.info(`🔐 Authentication: OAuth 2.0 with Google`);
+  logger.info(`🌍 Environment: ${config.nodeEnv}`);
+  logger.info(`📝 Docs available at: http://localhost:${PORT}/docs`);
+  
+  console.log(`\n💰 Cash Flow Tracker API v2.0`);
+  console.log(`🚀 Server: http://localhost:${PORT}`);
+  console.log(`🔐 Multi-user mode with OAuth 2.0`);
+  console.log(`📝 API Docs: http://localhost:${PORT}/docs`);
+  console.log(`🌍 Environment: ${config.nodeEnv}\n`);
 });
 
 // Graceful shutdown

@@ -1,8 +1,5 @@
-import GoogleSheetsService from '../services/googleSheetsService.js';
 import logger from '../config/logger.js';
 import { ApiError } from '../middleware/errorHandler.js';
-
-const sheetsService = new GoogleSheetsService();
 
 /**
  * Get all fixed expenses
@@ -11,7 +8,7 @@ export const getFixedExpenses = async (req, res, next) => {
   try {
     logger.info('GET /api/fixed-expenses - Fetching all fixed expenses');
     
-    const fixedExpenses = await sheetsService.getFixedExpensesObjects();
+    const fixedExpenses = await req.sheetsService.getFixedExpensesObjects();
     
     res.json({
       success: true,
@@ -55,7 +52,7 @@ export const addFixedExpense = async (req, res, next) => {
       debtId: req.body.debtId || null
     };
 
-    const result = await sheetsService.addFixedExpense(fixedExpense);
+    const result = await req.sheetsService.addFixedExpense(fixedExpense);
     
     logger.info('Fixed expense added successfully', { fixedExpenseId: fixedExpense.id });
     
@@ -102,7 +99,7 @@ export const updateFixedExpense = async (req, res, next) => {
       debtId: req.body.debtId !== undefined ? (req.body.debtId || null) : undefined
     };
 
-    const result = await sheetsService.updateFixedExpense(fixedExpense);
+    const result = await req.sheetsService.updateFixedExpense(fixedExpense);
     
     logger.info('Fixed expense updated successfully', { fixedExpenseId: fixedExpense.id });
     
@@ -134,7 +131,7 @@ export const deleteFixedExpense = async (req, res, next) => {
       throw new ApiError(400, 'Missing required field: id');
     }
 
-    const result = await sheetsService.deleteFixedExpense(id);
+    const result = await req.sheetsService.deleteFixedExpense(id);
 
     // Build response message
     let message = 'Fixed expense deleted successfully';
@@ -174,7 +171,7 @@ export const generateFixedExpenses = async (req, res, next) => {
       throw new ApiError(400, 'Missing or invalid month. Expected format: YYYY-MM');
     }
 
-    const result = await sheetsService.generateFixedExpensesForMonth(month);
+    const result = await req.sheetsService.generateFixedExpensesForMonth(month);
 
     res.status(201).json({
       success: true,
