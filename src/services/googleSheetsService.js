@@ -239,7 +239,7 @@ class GoogleSheetsService {
       }
 
       logger.info('Fetching categories from Google Sheets');
-      const response = await this.makeRequest('/values/Categories!A:C');
+      const response = await this.makeRequest('/values/Categories!A:D');
       const values = response.values || [];
       const categories = this.coerceTypesForSheet(
         this.normalizeKeysForSheet(this.mapRowsToObjects(values), 'Categories'),
@@ -273,15 +273,16 @@ class GoogleSheetsService {
       const categoryData = {
         id: newId,
         name: category.name,
-        color: category.color || '#6B7280'
+        color: category.color || '#6B7280',
+        icon: category.icon || '📁'
       };
       
       // Add to Categories sheet
       const values = [
-        [categoryData.id, categoryData.name, categoryData.color]
+        [categoryData.id, categoryData.name, categoryData.color, categoryData.icon]
       ];
       
-      const response = await this.makeRequest('/values/Categories!A:C:append?valueInputOption=RAW', {
+      const response = await this.makeRequest('/values/Categories!A:D:append?valueInputOption=RAW', {
         method: 'POST',
         body: JSON.stringify({
           values: values
@@ -334,14 +335,15 @@ class GoogleSheetsService {
       const updateData = {
         id: parseInt(id),
         name: categoryData.name,
-        color: categoryData.color || '#6B7280'
+        color: categoryData.color || '#6B7280',
+        icon: categoryData.icon || '📁'
       };
       
       const values = [
-        [updateData.id, updateData.name, updateData.color]
+        [updateData.id, updateData.name, updateData.color, updateData.icon]
       ];
       
-      const response = await this.makeRequest(`/values/Categories!A${rowNumber}:C${rowNumber}?valueInputOption=RAW`, {
+      const response = await this.makeRequest(`/values/Categories!A${rowNumber}:D${rowNumber}?valueInputOption=RAW`, {
         method: 'PUT',
         body: JSON.stringify({
           values: values
@@ -391,7 +393,7 @@ class GoogleSheetsService {
       const rowNumber = categoryIndex + 2;
       
       // Delete the row
-      const response = await this.makeRequest(`/values/Categories!A${rowNumber}:C${rowNumber}:clear`, {
+      const response = await this.makeRequest(`/values/Categories!A${rowNumber}:D${rowNumber}:clear`, {
         method: 'POST'
       });
       

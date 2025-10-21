@@ -30,11 +30,18 @@ export const requireJWT = async (req, res, next) => {
     // Extract token from Authorization header
     const authHeader = req.headers.authorization;
     
+    logger.debug('JWT authentication attempt', { 
+      hasAuthHeader: !!authHeader,
+      authHeader: authHeader ? authHeader.substring(0, 20) + '...' : 'none'
+    });
+    
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      logger.warn('No valid authorization header', { authHeader });
       throw new ApiError(401, 'No token provided');
     }
 
     const token = authHeader.split(' ')[1];
+    logger.debug('Token extracted', { tokenLength: token ? token.length : 0 });
 
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);

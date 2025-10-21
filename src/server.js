@@ -102,7 +102,13 @@ if (config.nodeEnv === 'development' || config.enableDocs) {
     const openapiPath = path.resolve(__dirname, './docs/openapi.json');
     const openapiDoc = JSON.parse(fs.readFileSync(openapiPath, 'utf-8'));
     app.get('/openapi.json', (_req, res) => res.json(openapiDoc));
-    app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiDoc, { explorer: true }));
+    app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiDoc, { 
+      explorer: true,
+      swaggerOptions: {
+        persistAuthorization: true,
+        displayRequestDuration: true
+      }
+    }));
     logger.info('Swagger UI mounted at /docs');
   } catch (e) {
     logger.error('Failed to load OpenAPI document', { error: e.message });
