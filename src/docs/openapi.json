@@ -166,7 +166,7 @@
       "put": {
         "tags": ["Authentication"],
         "summary": "Actualizar Sheet ID",
-        "description": "Actualiza el ID de Google Sheet del usuario",
+        "description": "Actualiza el ID de Google Sheet del usuario. Valida acceso y estructura. Se puede omitir validación con skipValidation=true",
         "security": [{ "BearerAuth": [] }],
         "requestBody": {
           "required": true,
@@ -175,7 +175,15 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "sheetId": { "type": "string", "description": "ID de Google Sheet" }
+                  "sheetId": { 
+                    "type": "string", 
+                    "description": "ID de Google Sheet a conectar" 
+                  },
+                  "skipValidation": {
+                    "type": "boolean",
+                    "description": "Omitir validación de estructura (default: false)",
+                    "default": false
+                  }
                 },
                 "required": ["sheetId"]
               }
@@ -184,18 +192,145 @@
         },
         "responses": {
           "200": {
-            "description": "Sheet ID actualizado",
+            "description": "Sheet ID actualizado exitosamente",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "sheetId": { "type": "string" },
+                        "title": { "type": "string" }
+                      }
+                    },
+                    "validation": {
+                      "type": "object",
+                      "properties": {
+                        "isValid": { "type": "boolean" },
+                        "missingSheets": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Hoja no válida o sin acceso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": false },
+                    "error": { "type": "string" },
+                    "validation": { "type": "object" },
                     "message": { "type": "string" }
                   }
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/auth/sheets": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Listar Sheets disponibles",
+        "description": "Obtiene la lista de todas las hojas de cálculo de Google Sheets disponibles para el usuario",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Lista de sheets obtenida exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string", "description": "Sheet ID" },
+                          "name": { "type": "string", "description": "Nombre del sheet" },
+                          "createdTime": { "type": "string", "format": "date-time" },
+                          "modifiedTime": { "type": "string", "format": "date-time" },
+                          "webViewLink": { "type": "string", "format": "uri" }
+                        }
+                      }
+                    },
+                    "count": { "type": "number", "description": "Número de sheets" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autenticado"
+          }
+        }
+      }
+    },
+    "/api/auth/sheet/validate": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Validar estructura de Sheet",
+        "description": "Valida que un sheet tenga acceso y la estructura requerida sin actualizar el sheetId del usuario",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sheetId": { 
+                    "type": "string", 
+                    "description": "ID de Google Sheet a validar" 
+                  }
+                },
+                "required": ["sheetId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validación completada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "sheetId": { "type": "string" },
+                        "title": { "type": "string" },
+                        "isValid": { "type": "boolean" },
+                        "missingSheets": { "type": "array", "items": { "type": "string" } },
+                        "existingSheets": { "type": "array", "items": { "type": "string" } },
+                        "requiredSheets": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sheet ID inválido"
+          },
+          "401": {
+            "description": "No autenticado"
           }
         }
       }

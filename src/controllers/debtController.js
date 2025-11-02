@@ -6,6 +6,24 @@ import { calculateStatement, normalizeAnnualRateToUnit, resolvePeriodBounds, bui
 import { daysBetweenDates } from '../utils/finance.js';
 
 /**
+ * Parse date string safely avoiding timezone issues
+ * Handles '2025-09-12' format by parsing components directly
+ */
+function parseDateString(dateStr) {
+  // Try YYYY-MM-DD format first
+  const parts = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (parts) {
+    const year = parseInt(parts[1], 10);
+    const month = parseInt(parts[2], 10) - 1; // Month is 0-indexed
+    const day = parseInt(parts[3], 10);
+    return new Date(year, month, day);
+  }
+  
+  // Fallback to standard Date parsing
+  return new Date(dateStr);
+}
+
+/**
  * Get all debts
  */
 export const getDebts = async (req, res, next) => {
@@ -612,6 +630,12 @@ export const getDebtStatementPreview = async (req, res, next) => {
       ? nextDateForDayOfMonth(debt.dueDay, statementDate)
       : new Date(statementDate.getFullYear(), statementDate.getMonth(), dayClamp(statementDate.getFullYear(), statementDate.getMonth(), 25));
 
+    // Calculate previous statement date (cutoff date of previous month)
+    const prevMonth = new Date(statementDate.getFullYear(), statementDate.getMonth() - 1, 1);
+    const prevStatementDate = Number.isFinite(debt.cutOffDay)
+      ? new Date(prevMonth.getFullYear(), prevMonth.getMonth(), dayClamp(prevMonth.getFullYear(), prevMonth.getMonth(), debt.cutOffDay))
+      : new Date(statementDate.getFullYear(), statementDate.getMonth(), 0);
+
     // If recompute=false and a record exists for this statementDate, return it directly
     const history = await req.sheetsService.getCreditHistoryObjects();
     const statementDateStr = statementDate.toISOString().slice(0,10);
@@ -627,14 +651,34 @@ export const getDebtStatementPreview = async (req, res, next) => {
     const previousBalance = lastForDebt && Number.isFinite(lastForDebt.statementBalance) ? Number(lastForDebt.statementBalance) : (Number.isFinite(debt.balance) ? Number(debt.balance) : 0);
 
     // Build events within period
+    // Period starts the day AFTER previous cutoff (inclusive) and ends BEFORE current cutoff day (exclusive)
     const allExpenses = await req.sheetsService.getExpensesObjects();
-    const startPeriod = new Date(statementDate.getFullYear(), statementDate.getMonth() - 1, statementDate.getDate());
+    // Start period: day after previous statement date (prevStatementDate + 1 day)
+    const startPeriod = new Date(prevStatementDate.getFullYear(), prevStatementDate.getMonth(), prevStatementDate.getDate() + 1);
+    
+    // Debug logging
+    logger.info('Statement preview period calculation', {
+      debtId: id,
+      periodParam,
+      cutOffDay: debt.cutOffDay,
+      prevStatementDate: prevStatementDate.toISOString().slice(0, 10),
+      startPeriod: startPeriod.toISOString().slice(0, 10),
+      statementDate: statementDate.toISOString().slice(0, 10),
+      totalExpensesFound: allExpenses.filter(e => e && e.debtId && String(e.debtId) === String(id)).length
+    });
+    
     const periodEvents = [];
+    const startPeriodDateOnly = new Date(startPeriod.getFullYear(), startPeriod.getMonth(), startPeriod.getDate());
+    const statementDateOnly = new Date(statementDate.getFullYear(), statementDate.getMonth(), statementDate.getDate());
+    
     for (const e of allExpenses) {
       if (!e || !e.debtId || String(e.debtId) !== String(id) || !e.date) continue;
-      const d = new Date(e.date);
-      const dateOnlyEvent = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      if (dateOnlyEvent >= new Date(startPeriod.getFullYear(), startPeriod.getMonth(), startPeriod.getDate()) && dateOnlyEvent < new Date(statementDate.getFullYear(), statementDate.getMonth(), statementDate.getDate())) {
+      
+      // Parse date string safely: '2025-09-12' format
+      const dateStr = String(e.date).trim();
+      const dateOnlyEvent = parseDateString(dateStr);
+      
+      if (dateOnlyEvent >= startPeriodDateOnly && dateOnlyEvent < statementDateOnly) {
         const entryType = e.entryType ? String(e.entryType).toLowerCase() : '';
         const amount = Number(e.amount) || 0;
         if (amount <= 0) continue;
@@ -643,6 +687,21 @@ export const getDebtStatementPreview = async (req, res, next) => {
         }
       }
     }
+    
+    // Debug: log all events found
+    logger.info('Period events found', {
+      debtId: id,
+      periodStart: startPeriod.toISOString().slice(0, 10),
+      periodEnd: statementDate.toISOString().slice(0, 10),
+      totalEvents: periodEvents.length,
+      charges: periodEvents.filter(e => e.kind === 'charge').length,
+      payments: periodEvents.filter(e => e.kind === 'payment').length,
+      eventDetails: periodEvents.map(e => ({
+        date: e.date.toISOString().slice(0, 10),
+        kind: e.kind,
+        amount: e.amount
+      }))
+    });
     periodEvents.sort((a, b) => {
       if (a.date.getTime() !== b.date.getTime()) return a.date - b.date;
       if (a.kind === b.kind) return 0;
@@ -651,36 +710,23 @@ export const getDebtStatementPreview = async (req, res, next) => {
 
     const charges = periodEvents.filter(e => e.kind === 'charge').reduce((s, e) => s + e.amount, 0);
     const payments = periodEvents.filter(e => e.kind === 'payment').reduce((s, e) => s + e.amount, 0);
+    
+    // Debug: log calculated totals
+    logger.info('Statement preview totals', {
+      debtId: id,
+      charges: Number(charges.toFixed(2)),
+      payments: Number(payments.toFixed(2)),
+      chargesBreakdown: periodEvents.filter(e => e.kind === 'charge').map(e => ({
+        date: e.date.toISOString().slice(0, 10),
+        amount: e.amount
+      }))
+    });
 
     const annualRateUnit = debt.interesEfectivo > 1 ? (debt.interesEfectivo / 100) : debt.interesEfectivo;
-    let nbBalance = Math.max(0, previousBalance);
-    let bBalance = 0;
-    let nbBalanceDays = 0;
-    let bBalanceDays = 0;
-    let cursor = new Date(startPeriod.getFullYear(), startPeriod.getMonth(), startPeriod.getDate());
-    const addSegment = (until) => {
-      const days = Math.round((new Date(until.getFullYear(), until.getMonth(), until.getDate()) - new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())) / (1000*60*60*24));
-      if (days > 0) {
-        nbBalanceDays += nbBalance * days;
-        bBalanceDays += bBalance * days;
-        cursor = until;
-      }
-    };
-    for (const ev of periodEvents) {
-      addSegment(ev.date);
-      if (ev.kind === 'payment') {
-        const appliedToNb = Math.min(nbBalance, ev.amount);
-        nbBalance -= appliedToNb;
-        const remainder = ev.amount - appliedToNb;
-        bBalance = Math.max(0, bBalance - remainder);
-      } else if (ev.kind === 'charge') {
-        bBalance += ev.amount;
-      }
-    }
-    addSegment(new Date(statementDate.getFullYear(), statementDate.getMonth(), statementDate.getDate()));
-    const interestSobreSaldo = Number((nbBalanceDays * ((annualRateUnit || 0)/365)).toFixed(2));
-    const interestBonificable = Number((bBalanceDays * ((annualRateUnit || 0)/365)).toFixed(2));
-
+    
+    // Use shared utility for SPD interest calculation
+    const { interestSobreSaldo, interestBonificable } = computeSpdInterests(previousBalance, periodEvents, annualRateUnit, startPeriod, statementDate);
+    
     // Carry-over usando utilidad compartida
     let interestCarryOver = 0;
     if (lastForDebt) {
@@ -696,9 +742,28 @@ export const getDebtStatementPreview = async (req, res, next) => {
       }
     }
     const interests = Number((interestSobreSaldo + interestCarryOver).toFixed(2));
+    
+    // Debug: log interest calculation details
+    logger.info('Interest calculation details', {
+      debtId: id,
+      previousBalance,
+      annualRate: debt.interesEfectivo,
+      annualRateUnit,
+      dailyRate: (annualRateUnit || 0) / 365,
+      startPeriod: startPeriod.toISOString().slice(0, 10),
+      endPeriod: statementDate.toISOString().slice(0, 10),
+      periodDays: daysBetweenDates(startPeriod, statementDate),
+      interestSobreSaldo,
+      interestCarryOver,
+      interests,
+      interestBonificable
+    });
     const bonifiableInterest = Number(interestBonificable.toFixed(2));
     const statementBalance = Number((Math.max(0, previousBalance + charges + interests - payments)).toFixed(2));
     const installmentBalance = Number((statementBalance + bonifiableInterest).toFixed(2));
+
+    // Calculate period days: from startPeriod (inclusive) to statementDate (exclusive - cutoff day not included)
+    const periodDays = daysBetweenDates(startPeriodDateOnly, statementDateOnly); // statementDate is exclusive, so no +1 needed
 
     const previewData = {
       debtId: id,
@@ -713,9 +778,17 @@ export const getDebtStatementPreview = async (req, res, next) => {
       installmentBalance,
       annualEffectiveRate: annualRateUnit,
       termMonths: null,
-      periodDays: daysBetweenDates(new Date(startPeriod.getFullYear(), startPeriod.getMonth(), startPeriod.getDate()), statementDate),
+      periodDays,
       paymentMade: await req.sheetsService.sumPaymentsForDebt(id, statementDate.toISOString().slice(0,10), dueDate.toISOString().slice(0,10)),
-      interestBreakdown: { interestSobreSaldo, interestBonificable, interestCarryOver }
+      interestBreakdown: { interestSobreSaldo, interestBonificable, interestCarryOver },
+      chargesDetail: periodEvents.filter(e => e.kind === 'charge').map(e => ({
+        date: e.date.toISOString().slice(0, 10),
+        amount: Number(e.amount.toFixed(2))
+      })),
+      paymentsDetail: periodEvents.filter(e => e.kind === 'payment').map(e => ({
+        date: e.date.toISOString().slice(0, 10),
+        amount: Number(e.amount.toFixed(2))
+      }))
     };
     const breakdownPreview = formatResponseTwoDecimals(
       previewData.interestBreakdown,

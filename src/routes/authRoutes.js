@@ -5,9 +5,11 @@ import {
   getCurrentUser,
   logout,
   updateSheetId,
-  checkAuth
+  checkAuth,
+  listUserSheets,
+  validateSheet
 } from '../controllers/authController.js';
-import { requireAuth } from '../middleware/authMiddleware.js';
+import { requireAuth, requireJWT } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -44,7 +46,21 @@ router.post('/logout', requireAuth, logout);
  * @desc    Update user's sheet ID
  * @access  Private
  */
-router.put('/sheet', requireAuth, updateSheetId);
+router.put('/sheet', requireJWT, updateSheetId);
+
+/**
+ * @route   GET /api/auth/sheets
+ * @desc    List all spreadsheets available to the user
+ * @access  Private
+ */
+router.get('/sheets', requireJWT, listUserSheets);
+
+/**
+ * @route   POST /api/auth/sheet/validate
+ * @desc    Validate a sheet structure without updating
+ * @access  Private
+ */
+router.post('/sheet/validate', requireJWT, validateSheet);
 
 /**
  * @route   GET /api/auth/check

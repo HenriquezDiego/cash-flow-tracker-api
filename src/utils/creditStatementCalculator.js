@@ -10,6 +10,18 @@ export function normalizeAnnualRateToUnit(rate) {
 }
 
 export function toDateOnly(d) {
+  // If d is a string in YYYY-MM-DD format, parse it safely
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}/.test(d)) {
+    const parts = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (parts) {
+      const year = parseInt(parts[1], 10);
+      const month = parseInt(parts[2], 10) - 1; // Month is 0-indexed
+      const day = parseInt(parts[3], 10);
+      return new Date(year, month, day);
+    }
+  }
+  
+  // For other formats, use standard Date parsing
   const dt = new Date(d);
   return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
 }
@@ -23,7 +35,7 @@ export function daysBetween(from, to) {
   if (!from || !to) return 0;
   const a = toDateOnly(from);
   const b = toDateOnly(to);
-  return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.floor((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 export function resolvePeriodBounds({ cutOffDay, dueDay }, base) {
@@ -72,6 +84,7 @@ export function buildEvents(expenses, debtId, startInclusive, endExclusive) {
   for (const e of expenses || []) {
     if (!e || !e.debtId || String(e.debtId) !== String(debtId) || !e.date) continue;
     const d = toDateOnly(e.date);
+    // Include events from start (inclusive) to end (exclusive - cutoff day not included)
     if (d >= start && d < end) {
       const entryType = e.entryType ? String(e.entryType).toLowerCase() : '';
       const amount = Number(e.amount) || 0;
@@ -128,9 +141,12 @@ export function computeSpdInterests(previousBalance, events, annualRateUnit, sta
   }
   addSegment(toDateOnly(end));
 
-  const interestSobreSaldo = Number((nbBalanceDays * dailyRate).toFixed(2));
-  const interestBonificable = Number((bBalanceDays * dailyRate).toFixed(2));
-  return { interestSobreSaldo, interestBonificable };
+  const interestSobreSaldo = nbBalanceDays * dailyRate;
+  const interestBonificable = bBalanceDays * dailyRate;
+  return { 
+    interestSobreSaldo,
+    interestBonificable
+  };
 }
 
 // Decide cuánto interés bonificable del periodo anterior se traslada (carry-over)
@@ -142,7 +158,7 @@ export function computeInterestCarryOver(previousRecord, previousPeriodPaid, eps
   const prevBonificable = Number(previousRecord.bonifiableInterest) || 0;
   const paid = Number(previousPeriodPaid) || 0;
   if (paid + epsilon < prevInstallment) {
-    return Number(prevBonificable.toFixed(2));
+    return prevBonificable; // Return exact value, rounding will happen when summing
   }
   return 0;
 }
@@ -163,7 +179,9 @@ export function calculateStatement({
   const { prevStatementDate, statementDate, nextStatementDate, dueDate, periodDays } = resolvePeriodBounds({ cutOffDay: debt.cutOffDay, dueDay: debt.dueDay }, periodDate);
   const annualUnit = normalizeAnnualRateToUnit(debt.interesEfectivo);
 
-  const periodEvents = buildEvents(expenses, debt.id, prevStatementDate, statementDate);
+  // Period starts the day AFTER previous cutoff (inclusive) and ends BEFORE current cutoff day (exclusive)
+  const startPeriod = new Date(prevStatementDate.getFullYear(), prevStatementDate.getMonth(), prevStatementDate.getDate() + 1);
+  const periodEvents = buildEvents(expenses, debt.id, startPeriod, statementDate);
   const charges = sumCharges(periodEvents);
   const payments = sumPayments(periodEvents);
 
@@ -171,12 +189,16 @@ export function calculateStatement({
     ? Number(opts.previousBalance)
     : Number.isFinite(debt.balance) ? Number(debt.balance) - 0 /* assumes current balance includes last cycle */ : 0;
 
-  const { interestSobreSaldo, interestBonificable } = computeSpdInterests(previousBalance, periodEvents, annualUnit, prevStatementDate, nextStatementDate);
+  // Calculate interests from startPeriod (day after prev cutoff) to statementDate (exclusive - cutoff day not included)
+  const { interestSobreSaldo, interestBonificable } = computeSpdInterests(previousBalance, periodEvents, annualUnit, startPeriod, statementDate);
   const interests = Number(interestSobreSaldo.toFixed(2));
   const bonifiableInterest = Number(interestBonificable.toFixed(2));
 
   const statementBalance = computeStatement(previousBalance, charges, interests, payments);
   const installmentBalance = computeInstallmentBalance(statementBalance, bonifiableInterest);
+
+  // Calculate period days: from startPeriod (inclusive) to statementDate (exclusive - cutoff day not included)
+  const calculatedPeriodDays = daysBetween(startPeriod, statementDate); // statementDate is exclusive, so no +1 needed
 
   return {
     previousBalance,
@@ -187,7 +209,7 @@ export function calculateStatement({
     bonifiableInterest,
     installmentBalance,
     annualEffectiveRate: annualUnit,
-    periodDays,
+    periodDays: calculatedPeriodDays,
     dates: {
       prevStatementDate: prevStatementDate.toISOString().slice(0,10),
       statementDate: statementDate.toISOString().slice(0,10),

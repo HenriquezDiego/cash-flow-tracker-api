@@ -6,12 +6,52 @@ import UserSheetService from '../services/userSheetService.js';
 const userSheetService = new UserSheetService();
 
 /**
- * Middleware to check if user is authenticated via session (Passport)
+ * Middleware to check if user is authenticated via session (Passport) or JWT
+ * Supports both authentication methods for flexibility
  */
-export const requireAuth = (req, res, next) => {
+export const requireAuth = async (req, res, next) => {
+  // First try session-based auth (Passport)
   if (req.isAuthenticated && req.isAuthenticated()) {
     logger.debug('User authenticated via session', { userId: req.user?.id });
     return next();
+  }
+
+  // Fall back to JWT auth if no session
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Get user from database
+      const user = await userSheetService.findUserById(decoded.userId);
+      
+      if (!user) {
+        logger.warn('JWT token valid but user not found in database', { userId: decoded.userId });
+        return res.status(401).json({
+          success: false,
+          error: 'User not found'
+        });
+      }
+
+      // Attach user to request
+      req.user = user;
+      
+      logger.debug('User authenticated via JWT', { userId: user.id });
+      return next();
+    }
+  } catch (error) {
+    // If JWT fails, log but don't throw - will return 401 below
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      logger.debug('JWT authentication failed', { 
+        error: error.name, 
+        message: error.message 
+      });
+    } else {
+      logger.debug('Error during JWT authentication', { error: error.message });
+    }
+    // Continue to error response below
   }
 
   logger.warn('Authentication required but user not authenticated');
