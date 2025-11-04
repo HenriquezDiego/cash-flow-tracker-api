@@ -41,7 +41,14 @@ const config = {
   },
 
   // Docs
-  enableDocs: (process.env.ENABLE_DOCS || '').toLowerCase() === 'true'
+  enableDocs: (process.env.ENABLE_DOCS || '').toLowerCase() === 'true',
+
+  // Scheduled tasks configuration
+  scheduledTasks: {
+    enabled: (process.env.SCHEDULED_TASKS_ENABLED || 'true').toLowerCase() === 'true',
+    cronSchedule: process.env.SCHEDULED_TASKS_CRON || '0 2 * * *', // Default: 2:00 AM daily
+    timezone: process.env.SCHEDULED_TASKS_TIMEZONE || 'America/Mexico_City'
+  }
 };
 
 // Validate required configuration

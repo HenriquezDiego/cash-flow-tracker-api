@@ -334,37 +334,38 @@ export const getDebtInstallments = async (req, res, next) => {
 };
 
 /**
- * POST /api/debts/:id/accrue?period=YYYY-MM|date=YYYY-MM-DD&recompute=true|false
- * Calculate and record one cycle in CreditHistory and add interest to Debts.balance
+ * Internal function to accrue debt interest (reusable for scheduled tasks)
+ * @param {Object} sheetsService - GoogleSheetsService instance
+ * @param {string} debtId - Debt ID
+ * @param {Object} options - Options: { recompute, dateParam, periodParam }
+ * @returns {Object} Result object with success, skipped, reason, data, etc.
  */
-export const accrueDebt = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const recompute = String(req.query.recompute || 'false').toLowerCase() === 'true';
-    const dateParam = req.query.date;
-    const periodParam = req.query.period;
-    const baseDate = dateParam ? new Date(dateParam) : new Date();
+export async function accrueDebtInternal(sheetsService, debtId, options = {}) {
+  const { recompute = false, dateParam = null, periodParam = null } = options;
+  const baseDate = dateParam ? new Date(dateParam) : new Date();
 
-    logger.info('POST /api/debts/:id/accrue - Start', { id, dateParam, periodParam, recompute });
+  logger.info('Accrue debt internal - Start', { debtId, dateParam, periodParam, recompute });
 
-    // 1) Load debt
-    const rows = await req.sheetsService.getDebts();
-    const idx = { id: 0, name: 1, issuer: 2, creditLimit: 3, balance: 4, dueDay: 5, cutOffDay: 6, maskPan: 7, interesEfectivo: 8, brand: 9, active: 10 };
-    const row = rows.slice(1).find(r => String(r[idx.id]) === String(id));
-    if (!row) throw new ApiError(404, 'Debt not found');
+  // 1) Load debt
+  const rows = await sheetsService.getDebts();
+  const idx = { id: 0, name: 1, issuer: 2, creditLimit: 3, balance: 4, dueDay: 5, cutOffDay: 6, maskPan: 7, interesEfectivo: 8, brand: 9, active: 10 };
+  const row = rows.slice(1).find(r => String(r[idx.id]) === String(debtId));
+  if (!row) {
+    throw new ApiError(404, 'Debt not found');
+  }
 
-    const debt = {
-      id: row[idx.id],
-      name: row[idx.name],
-      balance: row[idx.balance] ? parseFloat(row[idx.balance]) : 0,
-      dueDay: row[idx.dueDay] ? parseInt(row[idx.dueDay], 10) : null,
-      cutOffDay: row[idx.cutOffDay] ? parseInt(row[idx.cutOffDay], 10) : null,
-      interesEfectivo: row[idx.interesEfectivo] ? parseFloat(row[idx.interesEfectivo]) : 0,
-      active: row[idx.active] === 'TRUE'
-    };
-    if (!debt.active) {
-      return res.status(200).json({ success: true, skipped: true, reason: 'Debt is inactive' });
-    }
+  const debt = {
+    id: row[idx.id],
+    name: row[idx.name],
+    balance: row[idx.balance] ? parseFloat(row[idx.balance]) : 0,
+    dueDay: row[idx.dueDay] ? parseInt(row[idx.dueDay], 10) : null,
+    cutOffDay: row[idx.cutOffDay] ? parseInt(row[idx.cutOffDay], 10) : null,
+    interesEfectivo: row[idx.interesEfectivo] ? parseFloat(row[idx.interesEfectivo]) : 0,
+    active: row[idx.active] === 'TRUE'
+  };
+  if (!debt.active) {
+    return { success: true, skipped: true, reason: 'Debt is inactive' };
+  }
 
     // 2) Resolve statementDate and dueDate
     const dayClamp = (y, m, d) => Math.min(Math.max(1, d), new Date(y, m + 1, 0).getDate());
@@ -416,31 +417,31 @@ export const accrueDebt = async (req, res, next) => {
       ? new Date(prevMonth.getFullYear(), prevMonth.getMonth(), dayClamp(prevMonth.getFullYear(), prevMonth.getMonth(), debt.cutOffDay))
       : new Date(statementDate.getFullYear(), statementDate.getMonth(), 0);
 
-    // 3) Idempotency: check existing CreditHistory for (id, statementDate)
-    const history = await req.sheetsService.getCreditHistoryObjects();
+    // 3) Idempotency: check existing CreditHistory for (debtId, statementDate)
+    const history = await sheetsService.getCreditHistoryObjects();
     const statementDateStr = statementDate.toISOString().slice(0, 10);
-    const exists = history.some(h => String(h.debtId) === String(id) && String(h.statementDate) === statementDateStr);
+    const exists = history.some(h => String(h.debtId) === String(debtId) && String(h.statementDate) === statementDateStr);
     let previousRowNumber = null;
     let previousRecord = null;
     if (exists && !recompute) {
-      return res.status(200).json({ success: true, skipped: true, reason: 'Already accrued for this statementDate', statementDate: statementDateStr });
+      return { success: true, skipped: true, reason: 'Already accrued for this statementDate', statementDate: statementDateStr };
     }
     if (exists && recompute) {
       // Load previous record to rollback
-      previousRowNumber = await req.sheetsService.findCreditHistoryRow(id, statementDateStr);
+      previousRowNumber = await sheetsService.findCreditHistoryRow(debtId, statementDateStr);
       if (previousRowNumber) {
-        previousRecord = await req.sheetsService.getCreditHistoryByRow(previousRowNumber);
+        previousRecord = await sheetsService.getCreditHistoryByRow(previousRowNumber);
       }
     }
 
     // 4) Determine previous record for previousBalance (we keep backward compat where available)
     const lastForDebt = history
-      .filter(h => String(h.debtId) === String(id) && h.statementDate && h.statementDate < statementDateStr)
+      .filter(h => String(h.debtId) === String(debtId) && h.statementDate && h.statementDate < statementDateStr)
       .sort((a, b) => (a.statementDate < b.statementDate ? 1 : -1))[0];
     const previousBalance = lastForDebt && Number.isFinite(lastForDebt.statementBalance) ? Number(lastForDebt.statementBalance) : (Number.isFinite(debt.balance) ? Number(debt.balance) : 0);
 
     // 5) Gather expenses in [prevStatementDate, statementDate) and compute components
-    const allExpenses = await req.sheetsService.getExpensesObjects();
+    const allExpenses = await sheetsService.getExpensesObjects();
     // Start period: day after previous statement date (prevStatementDate + 1 day)
     const startPeriod = new Date(prevStatementDate.getFullYear(), prevStatementDate.getMonth(), prevStatementDate.getDate() + 1);
     
@@ -449,7 +450,7 @@ export const accrueDebt = async (req, res, next) => {
     const statementDateOnly = new Date(statementDate.getFullYear(), statementDate.getMonth(), statementDate.getDate());
     
     for (const e of allExpenses) {
-      if (!e || !e.debtId || String(e.debtId) !== String(id) || !e.date) continue;
+      if (!e || !e.debtId || String(e.debtId) !== String(debtId) || !e.date) continue;
       
       // Parse date string safely: '2025-09-12' format
       const dateStr = String(e.date).trim();
@@ -482,8 +483,8 @@ export const accrueDebt = async (req, res, next) => {
     let interestCarryOver = 0;
     if (lastForDebt) {
       try {
-        const prevPaid = await req.sheetsService.sumPaymentsForDebt(
-          id,
+        const prevPaid = await sheetsService.sumPaymentsForDebt(
+          debtId,
           String(lastForDebt.statementDate),
           String(lastForDebt.dueDate)
         );
@@ -497,11 +498,9 @@ export const accrueDebt = async (req, res, next) => {
     const statementBalance = Number((Math.max(0, previousBalance + charges + interests - payments)).toFixed(2));
     const installmentBalance = Number((statementBalance + bonifiableInterest).toFixed(2));
 
-    // No dryRun here; use preview endpoint for GET
-
     // 7) Persist: append/update CreditHistory (no balance adjustments; interests are descriptive)
     const record = {
-      debtId: id,
+      debtId: debtId,
       statementDate: statementDateStr,
       dueDate: dueDate.toISOString().slice(0, 10),
       previousBalance,
@@ -514,19 +513,19 @@ export const accrueDebt = async (req, res, next) => {
       annualEffectiveRate: annualRateUnit,
       termMonths: null,
       periodDays: daysBetweenDates(new Date(startPeriod.getFullYear(), startPeriod.getMonth(), startPeriod.getDate()), statementDate) || 0,
-      paymentMade: await req.sheetsService.sumPaymentsForDebt(id, statementDateStr, dueDate.toISOString().slice(0,10))
+      paymentMade: await sheetsService.sumPaymentsForDebt(debtId, statementDateStr, dueDate.toISOString().slice(0,10))
     };
     if (exists && previousRowNumber && recompute) {
-      await req.sheetsService.updateCreditHistoryRow(previousRowNumber, record);
+      await sheetsService.updateCreditHistoryRow(previousRowNumber, record);
     } else {
-      await req.sheetsService.appendCreditHistoryRecord(record);
+      await sheetsService.appendCreditHistoryRecord(record);
     }
 
     // Calculate current balance: statementBalance + charges after statementDate - payments after statementDate
     const currentDate = new Date();
     const currentCharges = allExpenses
       .filter(e => {
-        if (!e || !e.debtId || String(e.debtId) !== String(id) || !e.date) return false;
+        if (!e || !e.debtId || String(e.debtId) !== String(debtId) || !e.date) return false;
         const dateOnlyEvent = parseDateString(String(e.date).trim());
         const entryType = e.entryType ? String(e.entryType).toLowerCase() : '';
         return dateOnlyEvent > statementDateOnly && 
@@ -537,7 +536,7 @@ export const accrueDebt = async (req, res, next) => {
     
     const currentPayments = allExpenses
       .filter(e => {
-        if (!e || !e.debtId || String(e.debtId) !== String(id) || !e.date) return false;
+        if (!e || !e.debtId || String(e.debtId) !== String(debtId) || !e.date) return false;
         const dateOnlyEvent = parseDateString(String(e.date).trim());
         const entryType = e.entryType ? String(e.entryType).toLowerCase() : '';
         return dateOnlyEvent > statementDateOnly && 
@@ -549,16 +548,17 @@ export const accrueDebt = async (req, res, next) => {
     const currentBalance = Number((statementBalance + currentCharges - currentPayments).toFixed(2));
     
     // Update debt balance with current balance (statementBalance + charges/payments after statement date)
-    await req.sheetsService.updateDebt({ id, balance: currentBalance });
+    await sheetsService.updateDebt({ id: debtId, balance: currentBalance });
 
     logger.info('Debt statement computed', { 
-      debtId: id, 
+      debtId: debtId, 
       statementDate: statementDateStr,
       statementBalance,
       currentCharges,
       currentPayments,
       currentBalance
     });
+    
     // Formatear breakdown y campos numéricos como strings con 2 decimales
     const breakdownFormatted = formatResponseTwoDecimals(
       { interestSobreSaldo, interestBonificable, interestCarryOver },
@@ -570,11 +570,35 @@ export const accrueDebt = async (req, res, next) => {
       ['previousBalance','charges','interests','payments','statementBalance','bonifiableInterest','installmentBalance','annualEffectiveRate','paymentMade'],
       true
     );
-    return res.status(200).json({
+    
+    return {
       success: true,
-      idempotency: { key: `${id}|${statementDateStr}`, status: 'created' },
-      data: formatted
-    });
+      idempotency: { key: `${debtId}|${statementDateStr}`, status: 'created' },
+      data: formatted,
+      statementDate: statementDateStr
+    };
+}
+
+/**
+ * POST /api/debts/:id/accrue?period=YYYY-MM|date=YYYY-MM-DD&recompute=true|false
+ * Calculate and record one cycle in CreditHistory and add interest to Debts.balance
+ */
+export const accrueDebt = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const recompute = String(req.query.recompute || 'false').toLowerCase() === 'true';
+    const dateParam = req.query.date;
+    const periodParam = req.query.period;
+
+    logger.info('POST /api/debts/:id/accrue - Start', { id, dateParam, periodParam, recompute });
+
+    const result = await accrueDebtInternal(req.sheetsService, id, { recompute, dateParam, periodParam });
+    
+    if (result.skipped) {
+      return res.status(200).json(result);
+    }
+    
+    return res.status(200).json(result);
   } catch (error) {
     logger.error('Error in accrueDebt controller', { params: req.params, query: req.query, error: error.message });
     next(error);

@@ -20,6 +20,7 @@ import logger from './config/logger.js';
 import { errorConverter, errorHandler, notFound } from './middleware/errorHandler.js';
 import authService from './services/authService.js';
 import { requireAuth, requireJWT, attachSheetsService } from './middleware/authMiddleware.js';
+import scheduledTasksService from './services/scheduledTasksService.js';
 
 // Import routes
 import authRoutes from './routes/authRoutes.js';
@@ -191,17 +192,29 @@ app.listen(PORT, () => {
   console.log(`🚀 Server: http://localhost:${PORT}`);
   console.log(`🔐 Multi-user mode with OAuth 2.0`);
   console.log(`📝 API Docs: http://localhost:${PORT}/docs`);
-  console.log(`🌍 Environment: ${config.nodeEnv}\n`);
+  console.log(`🌍 Environment: ${config.nodeEnv}`);
+  
+  // Start scheduled tasks
+  try {
+    scheduledTasksService.start();
+    logger.info('✅ Scheduled tasks service started');
+    console.log(`⏰ Scheduled tasks: Enabled (daily at 2:00 AM)\n`);
+  } catch (error) {
+    logger.error('Failed to start scheduled tasks service', { error: error.message });
+    console.log(`⚠️  Scheduled tasks: Failed to start\n`);
+  }
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  scheduledTasksService.stop();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully');
+  scheduledTasksService.stop();
   process.exit(0);
 });
 

@@ -355,6 +355,33 @@ class UserSheetService {
   }
 
   /**
+   * Get all users from the master sheet
+   * @returns {Array} Array of user objects
+   */
+  async getAllUsers() {
+    try {
+      logger.debug('Fetching all users from master sheet');
+      const response = await this.makeRequest('/values/Users!A:I');
+      const rows = response.values || [];
+      
+      // Skip header row and parse all users
+      const users = [];
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (row && row[USER_COLUMNS.ID]) {
+          users.push(this.parseUserRow(row));
+        }
+      }
+      
+      logger.info('All users fetched', { count: users.length });
+      return users;
+    } catch (error) {
+      logger.error('Error getting all users', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
    * Parse a row from the Users sheet into a user object
    * @param {Array} row - Row data from sheet
    * @returns {Object} User object
