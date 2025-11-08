@@ -50,7 +50,6 @@ export const googleCallback = (req, res, next) => {
     const token = generateToken(req.user);
 
     // Redirect to frontend with token
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const redirectUrl = `${frontendUrl}/auth/callback?token=${token}`;
     res.redirect(redirectUrl);
   });
